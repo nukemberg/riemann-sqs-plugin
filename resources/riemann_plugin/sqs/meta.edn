@@ -1,0 +1,4 @@
+{
+	:plugin "sqs"
+	:require riemann-sqs-plugin.core
+}
