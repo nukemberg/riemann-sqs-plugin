@@ -48,14 +48,15 @@
             message-handler (make-message-handler parser-fn core)
             messages (->> opts
                           (sqs/receive-message creds)
-                          :messages
-                          (map :body))
+                          :messages)
+            messages-bodies (map :body messages)
            ]
-        (doseq [message messages]
-          (message-handler message))
-        (when-not (get opts :delete false)
-          (debug "Deleting messages from SQS" messages)
-          (sqs/delete-message-batch creds :queue-url queue-url :entries (map #(rename-keys % {:message-id :id}) messages))))
+        (when (seq messages)
+          (doseq [message messages-bodies]
+            (message-handler message))
+          (when-not (get opts :delete false)
+            (debug "Deleting messages from SQS" messages)
+            (sqs/delete-message-batch creds :queue-url queue-url :entries (map #(rename-keys % {:message-id :id}) messages))))
       (catch Exception e
         (error e "Failed to read from SQS")))))
 
