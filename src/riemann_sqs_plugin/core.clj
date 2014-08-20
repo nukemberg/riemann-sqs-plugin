@@ -12,7 +12,7 @@
 		))
 
 (def mandatory-opts [:access-key :secret-key :queue-url])
-(def default-opts {:concurrency 1, :max-number-of-messages 5, :wait-time-seconds 10, :delete false, :parser-fn #(json/parse-string % true)})
+(def default-opts {:concurrency 1, :max-number-of-messages 5, :wait-time-seconds 10, :parser-fn #(json/parse-string % true) :delete-all false})
 (def run-flag (atom false))
 
 (defn- parse-message
@@ -31,32 +31,33 @@
 
 (defn- make-message-handler [parser-fn core]
   (fn message-handler [message]
-    (when-let [event (parse-message parser-fn message)]
+    (when-let [event (parse-message parser-fn (:body message))]
       (debug "Injecting event into core" event)
       (try
         (core/stream! @core event)
+        message
         (catch Exception e
           (warn e "Failed to inject event into core" event))))))
 
 (defn- consume-forever 
   "Consumer loop"
-  [core {:keys [parser-fn queue-url] :as opts}]
+  [core {:keys [parser-fn queue-url delete-all] :as consumer-opts}]
   (while @run-flag
     (try
-      (let [opts (select-keys opts [:queue-url :max-number-of-messages :wait-time-seconds :delete :access-key :secret-key :region])
-            creds (select-keys opts [:region :access-key :secret-key])
+      (let [opts (select-keys consumer-opts [:queue-url :max-number-of-messages :wait-time-seconds])
+            creds (select-keys consumer-opts [:region :access-key :secret-key])
             message-handler (make-message-handler parser-fn core)
             messages (->> opts
                           (sqs/receive-message creds)
                           :messages)
-            messages-bodies (map :body messages)
            ]
         (when (seq messages)
-          (doseq [message messages-bodies]
-            (message-handler message))
-          (when-not (get opts :delete false)
-            (debug "Deleting messages from SQS" messages)
-            (sqs/delete-message-batch creds :queue-url queue-url :entries (map #(rename-keys % {:message-id :id}) messages))))
+          (let [processed-messages (mapv message-handler messages) ; use mapv instead of map to avoid lazy evaluation
+                messages-to-delete (remove nil? (if delete-all messages processed-messages))
+               ]
+            (when (seq messages-to-delete)
+              (debug "Deleting messages from SQS" messages-to-delete)
+              (sqs/delete-message-batch creds :queue-url queue-url :entries (map #(rename-keys % {:message-id :id}) messages-to-delete))))))
       (catch Exception e
         (error e "Failed to read from SQS")))))
 

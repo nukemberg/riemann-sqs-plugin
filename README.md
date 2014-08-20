@@ -11,11 +11,12 @@ In your riemann.config
 (load-plugins) ; will load plugins from the classpath
 
 (sqs/sqs-consumer {:queue-url "https://us-west-1.queue.amazonaws.com/22222313133/test"
-                       :delete true
-                       :concurrency 1
-                       :max-number-of-messages 10
-                       :wait-time-seconds 10
-                       :parser-fn #(json/parse-string % true)})
+                       :concurrency 1 ; number of consumer threads
+                       :max-number-of-messages 10 ; max number of messages to fetch in one query
+                       :wait-time-seconds 10 ; polling timeout
+                       :parser-fn #(json/parse-string % true) ; message parsing function, the sample function here is the default
+                       :delete-all true ; if true delete messages even if failed to handle them
+                       })
 
 ```
 
