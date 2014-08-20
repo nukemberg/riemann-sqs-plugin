@@ -39,27 +39,29 @@
         (catch Exception e
           (warn e "Failed to inject event into core" event))))))
 
-(defn- consume-forever 
+(defn- ^{:testable true} consume
+  [core {:keys [parser-fn queue-url delete-all] :as consumer-opts} sqs-receive-messages sqs-delete-message-batch]
+  (try
+    (let [opts (select-keys consumer-opts [:queue-url :max-number-of-messages :wait-time-seconds])
+          creds (select-keys consumer-opts [:region :access-key :secret-key])
+          message-handler (make-message-handler parser-fn core)
+          messages (->> opts
+                        (sqs-receive-messages creds)
+                        :messages)
+         ]
+      (when (seq messages)
+        (let [processed-messages (mapv message-handler messages) ; use mapv instead of map to avoid lazy evaluation
+              messages-to-delete (remove nil? (if delete-all messages processed-messages))
+             ]
+          (when (seq messages-to-delete)
+            (debug "Deleting messages from SQS" messages-to-delete)
+            (sqs-delete-message-batch creds :queue-url queue-url :entries (map #(rename-keys % {:message-id :id}) messages-to-delete))))))
+    (catch Exception e
+      (error e "Failed to read from SQS"))))
+
+(defn- ^{:testable true} consume-forever 
   "Consumer loop"
-  [core {:keys [parser-fn queue-url delete-all] :as consumer-opts}]
-  (while @run-flag
-    (try
-      (let [opts (select-keys consumer-opts [:queue-url :max-number-of-messages :wait-time-seconds])
-            creds (select-keys consumer-opts [:region :access-key :secret-key])
-            message-handler (make-message-handler parser-fn core)
-            messages (->> opts
-                          (sqs/receive-message creds)
-                          :messages)
-           ]
-        (when (seq messages)
-          (let [processed-messages (mapv message-handler messages) ; use mapv instead of map to avoid lazy evaluation
-                messages-to-delete (remove nil? (if delete-all messages processed-messages))
-               ]
-            (when (seq messages-to-delete)
-              (debug "Deleting messages from SQS" messages-to-delete)
-              (sqs/delete-message-batch creds :queue-url queue-url :entries (map #(rename-keys % {:message-id :id}) messages-to-delete))))))
-      (catch Exception e
-        (error e "Failed to read from SQS")))))
+  [run-flag & args] (while @run-flag (apply consume args)))
 
 
 ; the plugin record implements ServiceEquiv and Service protocols
@@ -78,7 +80,7 @@
       (infof "Starting fixed thread pool executor with concurrency %d" concurrency)
       (let [executor (Executors/newFixedThreadPool concurrency)]
         (dotimes [_ concurrency]
-          (.submit executor (partial consume-forever core opts)))
+          (.submit executor (partial consume-forever run-flag core opts sqs/receive-message sqs/delete-message-batch)))
         (reset! killer (fn [] (.shutdown executor))))))
   (stop! [this]
     (reset! run-flag false)

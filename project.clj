@@ -7,4 +7,11 @@
   					[org.clojure/clojure "1.6.0"]
   					[amazonica "0.2.24" :exclusions [com.amazonaws/aws-java-sdk]]
   				]
+  :profiles {
+    :dev {
+      :dependencies [
+        [midje "1.6.3"]
+      ]
+    }
+  }
 )
