@@ -40,14 +40,10 @@
           (warn e "Failed to inject event into core" event))))))
 
 (defn- ^{:testable true} consume
-  [core {:keys [parser-fn queue-url delete-all] :as consumer-opts} sqs-receive-messages sqs-delete-message-batch]
+  [core {:keys [parser-fn delete-all] :as consumer-opts} sqs-receive-messages sqs-delete-message-batch]
   (try
-    (let [opts (select-keys consumer-opts [:queue-url :max-number-of-messages :wait-time-seconds])
-          creds (select-keys consumer-opts [:region :access-key :secret-key])
-          message-handler (make-message-handler parser-fn core)
-          messages (->> opts
-                        (sqs-receive-messages creds)
-                        :messages)
+    (let [message-handler (make-message-handler parser-fn core)
+          messages (:messages (sqs-receive-messages))
          ]
       (when (seq messages)
         (let [processed-messages (mapv message-handler messages) ; use mapv instead of map to avoid lazy evaluation
@@ -55,7 +51,7 @@
              ]
           (when (seq messages-to-delete)
             (debug "Deleting messages from SQS" messages-to-delete)
-            (sqs-delete-message-batch creds :queue-url queue-url :entries (map #(rename-keys % {:message-id :id}) messages-to-delete))))))
+            (sqs-delete-message-batch messages-to-delete)))))
     (catch Exception e
       (error e "Failed to read from SQS"))))
 
@@ -74,13 +70,24 @@
   (conflict? [this other] false)
   (reload! [this new-core]
     (reset! core new-core))
-  (start! [{{concurrency :concurrency} :opts :as this}]
+  (start! [{{:keys [concurrency queue-url]} :opts :as this}]
     (locking this
       (reset! run-flag true)
       (infof "Starting fixed thread pool executor with concurrency %d" concurrency)
-      (let [executor (Executors/newFixedThreadPool concurrency)]
+      (let [ executor (Executors/newFixedThreadPool concurrency)
+             sqs-opts (select-keys opts [:queue-url :max-number-of-messages :wait-time-seconds])
+             consumer-opts (select-keys opts [:parser-fn :delete-all])
+             creds (select-keys opts [:region :access-key :secret-key])
+           ]
         (dotimes [_ concurrency]
-          (.submit executor (partial consume-forever run-flag core opts sqs/receive-message sqs/delete-message-batch)))
+          (.submit executor (partial
+                              consume-forever 
+                              run-flag 
+                              core 
+                              consumer-opts
+                              (partial sqs/receive-message creds sqs-opts)
+                              (fn sqs-delete-message-batch [messages]
+                                (sqs/delete-message-batch creds :queue-url queue-url :entries (map #(rename-keys % {:message-id :id}) messages))))))
         (reset! killer (fn [] (.shutdown executor))))))
   (stop! [this]
     (reset! run-flag false)

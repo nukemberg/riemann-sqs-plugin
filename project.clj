@@ -11,6 +11,7 @@
     :dev {
       :dependencies [
         [midje "1.6.3"]
+        [riemann "0.2.6"]
       ]
     }
   }
