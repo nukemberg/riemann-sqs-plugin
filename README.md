@@ -1,6 +1,7 @@
 # riemann-sqs-plugin
 
 A [Riemann](http://riemann.io) plugin to consume events from AWS SQS queue.
+[![Build Status](https://travis-ci.org/avishai-ish-shalom/riemann-sqs-plugin.svg?branch=master)](https://travis-ci.org/avishai-ish-shalom/riemann-sqs-plugin)
 
 ## Usage
 
