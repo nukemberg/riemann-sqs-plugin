@@ -3,15 +3,13 @@
   :url "https://github.com/avishai-ish-shalom/riemann-sqs-plugin"
   :license {:name "Apache v2"
             :url "http://www.apache.org/licenses/LICENSE-2.0.html"}
-  :dependencies [
-  					[org.clojure/clojure "1.6.0"]
-  					[amazonica "0.2.24" :exclusions [com.amazonaws/aws-java-sdk]]
-  				]
+  :dependencies []
   :profiles {
     :dev {
       :dependencies [
+	[org.clojure/clojure "1.6.0"]
         [midje "1.6.3"]
-        [riemann "0.2.6"]
+        [riemann "0.2.10"]
       ]
     }
   }

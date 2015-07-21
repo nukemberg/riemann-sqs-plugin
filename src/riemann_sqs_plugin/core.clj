@@ -1,6 +1,6 @@
 (ns riemann-sqs-plugin.core
 	(:import [java.util.concurrent Executors])
-	(:require 
+	(:require
 			[amazonica.aws.sqs :as sqs]
 			[riemann.core :as core]
 			[riemann.service :refer [Service ServiceEquiv]]
@@ -19,7 +19,7 @@
   "Safely run the parser function and verify the resulting event"
   [parser-fn message]
   (debug "Parsing message with parser function" message)
-  (try 
+  (try
     (let [event (parser-fn message)]
       (if (and (instance? clojure.lang.Associative event) (every? keyword? (keys event)))
         event
@@ -55,7 +55,7 @@
     (catch Exception e
       (error e "Failed to read from SQS"))))
 
-(defn- ^{:testable true} consume-forever 
+(defn- ^{:testable true} consume-forever
   "Consumer loop"
   [run-flag & args] (while @run-flag (apply consume args)))
 
@@ -81,9 +81,9 @@
            ]
         (dotimes [_ concurrency]
           (.submit executor (partial
-                              consume-forever 
-                              run-flag 
-                              core 
+                              consume-forever
+                              run-flag
+                              core
                               consumer-opts
                               (partial sqs/receive-message creds sqs-opts)
                               (fn sqs-delete-message-batch [messages]
@@ -101,4 +101,3 @@
   {:pre	[(every? opts mandatory-opts)]}
   (let [opts (merge default-opts opts)]
   	(service! (SQSInput. opts (atom nil) (atom nil)))))
-
